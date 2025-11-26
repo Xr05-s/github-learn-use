@@ -1,0 +1,108 @@
+C51 COMPILER V9.54   SERIAL                                                                11/22/2025 10:16:34 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE SERIAL
+OBJECT MODULE PLACED IN .\Objects\serial.obj
+COMPILER INVOKED BY: F:\keil\C51\BIN\C51.EXE serial.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\seria
+                    -l.lst) OBJECT(.\Objects\serial.obj)
+
+line level    source
+
+   1          #include "main.h"
+   2          
+   3          void ms_delay(u16 t)
+   4          {
+   5   1              unsigned char data i, j;
+   6   1      
+   7   1              while (t--)
+   8   1              {
+   9   2      
+  10   2                      _nop_();
+  11   2                      i = 2;
+  12   2                      j = 199;
+  13   2                      do
+  14   2                      {
+  15   3                              while (--j)
+  16   3                                      ;
+  17   3                      } while (--i);
+  18   2              }
+  19   1      }
+  20          
+  21          void Uart1_Init(void) // 9600bps@11.0592MHz  12T模式
+  22          {
+  23   1              SCON = 0x50;  // 8位数据,可变波特率,REN置位允许串行接收状态
+  24   1              PCON |= 0x80; // SMOD波特率选择位为1，波特率加倍
+  25   1      
+  26   1              TMOD &= 0x0F; // 设置定时器模式，8位定时器，自动重装，波特率比16位准确
+  27   1              TMOD |= 0x20;
+  28   1      
+  29   1              TL1 = 0xFA; // 设置定时初始值
+  30   1              TH1 = TL1;      // 设置定时重载值
+  31   1      
+  32   1              ET1 = 0; // 禁止定时器中断
+  33   1              TR1 = 1; // 定时器1开始计时
+  34   1              ES = 0;  // 打开串口中断允许位
+  35   1              EA = 1;  // 打开总中断
+  36   1      }
+  37          void UartInit(void) // 9600bps@12.000MHz
+  38          {
+  39   1              PCON |= 0x80; // 使能波特率倍速位SMOD
+  40   1              SCON = 0x50;  // 8位数据,可变波特率
+  41   1              // AUXR &= 0xBF;                //定时器1时钟为Fosc/12,即12T
+  42   1              // AUXR &= 0xFE;                //串口1选择定时器1为波特率发生器
+  43   1              TMOD &= 0x0F; // 清除定时器1模式位
+  44   1              TMOD |= 0x20; // 设定定时器1为8位自动重装方式
+  45   1              TL1 = 0xF9;       // 设定定时初值
+  46   1              TH1 = 0xF9;       // 设定定时器重装值
+  47   1              ET1 = 0;          // 禁止定时器1中断
+  48   1              TR1 = 1;          // 启动定时器1
+  49   1              ES = 0;           // 打开串口中断允许位
+  50   1              EA = 1;           // 打开总中断
+  51   1      }
+  52          
+  53          void UART_SendByte(u8 Byte)
+  54          {
+C51 COMPILER V9.54   SERIAL                                                                11/22/2025 10:16:34 PAGE 2   
+
+  55   1              ES = 0; // 关闭串口中断
+  56   1              TI = 0; // 清发送完毕中断请求标志位
+  57   1              SBUF = Byte;
+  58   1              while (TI == 0)
+  59   1                      ; // 发送完成置1，需要软件复位
+  60   1              TI = 0;
+  61   1              ES = 1; // 允许串口中断
+  62   1      }
+  63          
+  64          void UART_Send12(u8 *str)
+  65          {
+  66   1              while (*str != '\0')
+  67   1              {
+  68   2                      UART_SendByte(*str);
+  69   2                      str++;
+  70   2              }
+  71   1      }
+  72          
+  73          void UART_Send(u8 *str)
+  74          {
+  75   1              while (*str != '\0')
+  76   1              {
+  77   2                      UART_SendByte(*str);
+  78   2                      str++;
+  79   2              }
+  80   1              UART_SendByte('\r'); // 回车
+  81   1              UART_SendByte('\n'); // 换行
+  82   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    137    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

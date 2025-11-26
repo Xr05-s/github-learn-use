@@ -1,0 +1,135 @@
+C51 COMPILER V9.54   MAIN                                                                  11/22/2025 15:50:09 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: F:\keil\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\main.ls
+                    -t) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include "main.h"
+   2          
+   3          /*CNT_FLAG 标志当前的程序状态，
+   4          0未接收信号，1测量周期中，2测量低电平中
+   5          （先测周期可以确保后续低电平准确？）*/
+   6          char CNT_FLAG = 1;
+   7          char BEGIN_FLAG = 0;   // 标记本次执行是否开始
+   8          char FALLING_FLAG = 0; // 记录下降沿触发次数
+   9          
+  10          char buf[30];  // 发送数组
+  11          int COUNT = 0; // 标记溢出次数
+  12          float DUTY_CYCLE=0; // 占空比
+  13          
+  14          int READ_TIME[3] = 0; // 单位：us
+  15          
+  16          void INTERRUPT_INIT()
+  17          {
+  18   1              TMOD = 0x01; // 定时器0工作在模式1
+  19   1              TH0 = 0;         // 定时器初值清零
+  20   1              TL0 = 0;
+  21   1              ET0 = 1; // 允许定时器0中断
+  22   1      
+  23   1              IT0 = 1; // 设置外部中断0为下降沿触发
+  24   1              EX0 = 1; // 允许外部中断0
+  25   1              EA = 1;  // 允许总中断
+  26   1      }
+  27          void IT_Count() interrupt 1
+  28          {
+  29   1              if (IT0 == 1)
+  30   1              {
+  31   2                      COUNT++;
+  32   2              }
+  33   1      }
+  34          
+  35          /*
+  36          通过改变外部中断触发方式，测量低电平时长和周期
+  37          */
+  38          void ET_0() interrupt 0 // 用于启动定时器和标志程序状态
+  39          {
+  40   1              TR0 = 1; // 启动定时器计数
+  41   1              if (IT0 == 1)
+  42   1              {
+  43   2                      FALLING_FLAG++;
+  44   2                      BEGIN_FLAG++;
+  45   2              }
+  46   1              if (CNT_FLAG == 2) // 需要标志位标志测量目标
+  47   1              {
+  48   2                      IT0 = 0; // 设置外部中断0为低电平触发
+  49   2              }
+  50   1      }
+  51          void main()
+  52          {
+  53   1              INTERRUPT_INIT(); // 定时器0+外部中断
+  54   1              // UartInit();            // 串口
+C51 COMPILER V9.54   MAIN                                                                  11/22/2025 15:50:09 PAGE 2   
+
+  55   1              Uart1_Init(); // 9600bps@11.0592MHz  12T模式
+  56   1              while (1)
+  57   1              {
+  58   2                      if (BEGIN_FLAG == 2 && FALLING_FLAG == 2)
+  59   2                      {
+  60   3                              TR0 = 0;                                                                                                                           // 停止计数
+  61   3                              EA = 0;                                                                                                                            // 开始读数防止中断
+  62   3                              READ_TIME[CNT_FLAG] = (int)((TH0 * 256 + TL0 + COUNT * 65536) * 1.09); // 计算总时间
+  63   3      
+  64   3                              sprintf(buf, "T=%d\r\n", READ_TIME[CNT_FLAG]);
+  65   3                              UART_Send(buf); // 发送数据
+  66   3      
+  67   3                              COUNT = 0; // 清零计数器
+  68   3                              TH0 = 0;   // 清零定时器
+  69   3                              TL0 = 0;
+  70   3      
+  71   3                              IT0 = 1;          // 设置外部中断0为下降沿触发，确保测量到完整的低电平时间
+  72   3                              CNT_FLAG = 2; // 进入测量低电平状态
+  73   3                              BEGIN_FLAG = 0;
+  74   3                              FALLING_FLAG = 0;
+  75   3                              EA = 1; // 允许中断
+  76   3                      }
+  77   2                      else if (IT0 == 0 && IE0 == 0)
+  78   2                      {
+  79   3                              TR0 = 0;                                                                                                                           // 停止计数
+  80   3                              EA = 0;                                                                                                                            // 开始读数防止中断
+  81   3                              READ_TIME[CNT_FLAG] = (int)((TH0 * 256 + TL0 + COUNT * 65536) * 1.09); // 计算总时间
+  82   3                              sprintf(buf, "TOFF=%d\r\n", READ_TIME[CNT_FLAG]);
+  83   3                              UART_Send(buf); // 发送数据
+  84   3      
+  85   3                              DUTY_CYCLE=(float)(READ_TIME[2])/(float)READ_TIME[1];
+  86   3                              sprintf(buf, "D=%f\r\n", DUTY_CYCLE);//此处不要用%d
+  87   3                              UART_Send(buf); // 发送数据
+  88   3      
+  89   3                              COUNT = 0; // 清零计数器
+  90   3                              TH0 = 0;   // 清零定时器
+  91   3                              TL0 = 0;
+  92   3      
+  93   3                              IT0 = 1;          // 设置外部中断0为下降沿触发
+  94   3                              CNT_FLAG = 0; // 进入未接收状态
+  95   3                              BEGIN_FLAG = 0;
+  96   3                              FALLING_FLAG = 0;
+  97   3                              EA = 1; // 允许中断
+  98   3                      }
+  99   2              }
+ 100   1      }
+ 101          /*
+ 102          问题及解决：
+ 103          中断标志位清零：除串口，均自动清零
+ 104          11.21：
+ 105          考虑解决如何检测低电平时间->下降沿触发后转低电平？
+ 106          完成串口发送
+ 107          */
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    475    ----
+   CONSTANT SIZE    =     24    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     45    ----
+   IDATA SIZE       =   ----    ----
+C51 COMPILER V9.54   MAIN                                                                  11/22/2025 15:50:09 PAGE 3   
+
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
